@@ -1,4 +1,4 @@
-# PolarObject
+# MuS-Polar3D
 [![Paper2](https://img.shields.io/badge/Paper-arXiv-blue)]() 
 [![BaiduPan](https://img.shields.io/badge/Data-BaiduPan-brightgreen)]()
 
@@ -39,8 +39,8 @@ This repository integrates multiple network architectures (DeepSfP, AttentionU<s
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/WangPuyun/PolarObject.git
-cd PolarObject
+git clone https://github.com/WangPuyun/MuS-Polar3D.git
+cd MuS-Polar3D
 ```
 
 ### 2. Prepare dataset
