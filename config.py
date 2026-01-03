@@ -13,12 +13,17 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from Datasets import MyDataset, RandomCrop, FixedCrop, RandomMove, unfold_image, concat_image, unfold_enhanced_image, RandomMovePad, concat_enhanced_image
 from torch.utils.data import DataLoader
-from AttentionU2Net import U2Net
+# SfP Baseline
+from AttentionU2Net.U2Net import AttentionU2Net
 from DeepSfP_Net import DeepSfP
-from TransUNet import TransUnet
+from TransUNet import TransUnet # SfPW
+from TransSfP.TransSfPNet.TransSfPNet import TransSfPNet
+
 from math import pi
 import math
 from utils_window import PATCH, OVERLAP, STRIDE, hann2d
+
+
 def init_distributed(local_rank, nprocs, url='tcp://localhost:25464'):
     """
     Initialize the distributed training environment.
@@ -38,7 +43,7 @@ def create_model_and_optimizer(args):
     Called during training.
     Creates model and optimizer, returns (model, optimizer, scheduler).
     """
-    model = TransUnet()
+    model = AttentionU2Net()
 
     # Move model to the specified device (local GPU)
     # print(args.local_rank)
@@ -93,7 +98,7 @@ def create_dataloaders(args):
     val_set = MyDataset(
         csv_file='Underwater Dataset/val_list_withoutcleanwater.csv',
         root_dir='Underwater Dataset/Baseline_Data',
-        transform=False  
+        transform=False
     )
 
     # Distributed samplers
@@ -108,7 +113,7 @@ def create_dataloaders(args):
     train_loader = DataLoader(
         train_set,
         batch_size=train_batch_size,
-        num_workers=4,
+        num_workers=16,
         pin_memory=True,
         sampler=train_sampler,
         drop_last=True
@@ -117,7 +122,7 @@ def create_dataloaders(args):
     val_loader = DataLoader(
         val_set,
         batch_size=val_batch_size,
-        num_workers=4,
+        num_workers=16,
         pin_memory=True,
         sampler=val_sampler,
         drop_last=True
@@ -148,7 +153,7 @@ def test_dataloaders(args):
     test_loader = DataLoader(
         test_set,
         batch_size=test_batch_size,
-        num_workers=2,
+        num_workers=4,
         pin_memory=True,
         sampler=test_sampler,
         drop_last=True
@@ -170,6 +175,7 @@ def save_checkpoint(model, optimizer, epoch, checkpoints_dir):
     torch.save(checkpoint, save_path)
     print(f"Model saved to:{save_path}")
 
+
 def train_sfp(train_loader, model, criterion, optimizer, epoch, writer, local_rank, args, train_loss_list):
     model.train()
     running_loss = 0
@@ -188,23 +194,12 @@ def train_sfp(train_loader, model, criterion, optimizer, epoch, writer, local_ra
         inputs = inputs.cuda(local_rank, non_blocking=True)
 
         outputs = model(inputs)
-        outputs = outputs * mask1
         outputs = normalize(outputs, dim=1)
-        ground_truths = ground_truths * mask1
-        
-        # Network outputs normal maps in [-1, 1] range; ground truth must be normalized to this interval for evaluation.
-        # outputs_n = (outputs * 2.0 - 1.0) * mask1
-        ground_truths_n = (ground_truths * 2.0 - 1.0) * mask1
 
-        cosine = 1 - criterion(outputs, ground_truths_n)
-        num_cosine = torch.sum(torch.sum(torch.sum(cosine, dim=1), dim=1))
-        M = torch.sum(torch.sum(torch.sum(mask, dim=1), dim=1))  # Foreground object pixels
-        back_ground = (train_loader.batch_size * 256 * 256) - M  # Background region pixels
-        loss_cosine = num_cosine - back_ground
-        loss = loss_cosine / M
+        loss = criterion(outputs, ground_truths, None, None, mask1, train_loader)
 
         # Synchronization barrier: processes wait here until all peers reach this point, guaranteeing precise and sequential output.
-        torch.distributed.barrier()  
+        torch.distributed.barrier()
 
         optimizer.zero_grad()
         loss.backward()
@@ -226,61 +221,61 @@ def train_sfp(train_loader, model, criterion, optimizer, epoch, writer, local_ra
     if local_rank == 0:
         writer.add_scalar('training_loss', epoch_loss, epoch + 1)
     train_loss_list.append(epoch_loss)
-        
+
     return model, train_loss_list
 
-def val_sfp(val_loader, model, writer, epoch, local_rank, args, criterion, val_loss_list):
 
+def val_sfp(val_loader, model, writer, epoch, local_rank, args, criterion, val_loss_list):
     model.eval()
     device = torch.device(f'cuda:{local_rank}')
-    window = hann2d(PATCH, device).unsqueeze(0).unsqueeze(0)     # (1,1,256,256)
+    window = hann2d(PATCH, device).unsqueeze(0).unsqueeze(0)  # (1,1,256,256)
 
     total_loss, total_samples = 0., 0
 
     with torch.no_grad():
         for i, sample in enumerate(val_loader):
 
-            inputs   = sample['input'].cuda(device)              # B=1, C=3/4, H, W
-            image   = sample['image'].cuda(device)
-            gt       = sample['ground_truth'].float().cuda(device) / 255.
-            mask     = sample['mask'].unsqueeze(1).cuda(device)  # (1,1,H,W)
+            inputs = sample['input'].cuda(device)  # B=1, C=3/4, H, W
+            image = sample['image'].cuda(device)
+            gt = sample['ground_truth'].float().cuda(device) / 255.
+            mask = sample['mask'].unsqueeze(1).cuda(device)  # (1,1,H,W)
             gt *= mask
 
-            H, W     = inputs.shape[2:]
+            H, W = inputs.shape[2:]
             # ----------- Prepare empty containers -----------
             out_sum = torch.zeros(1, 3, H, W, device=device)
-            w_sum   = torch.zeros(1, 1, H, W, device=device)
+            w_sum = torch.zeros(1, 1, H, W, device=device)
 
             # ----------- Sliding window -----------
             for y in range(0, H - PATCH + 1, STRIDE):
                 for x in range(0, W - PATCH + 1, STRIDE):
-
-                    patch = inputs[..., y:y+PATCH, x:x+PATCH]     # (1,C,256,256)
-                    patch2 = image[..., y:y+PATCH, x:x+PATCH]
-                    pred = model(patch)                      # (1,3,256,256) 
-                    pred = pred * window                         # Weighted
-                    out_sum[..., y:y+PATCH, x:x+PATCH] += pred
-                    w_sum[...,  y:y+PATCH, x:x+PATCH] += window
+                    patch = inputs[..., y:y + PATCH, x:x + PATCH]  # (1,C,256,256)
+                    patch2 = image[..., y:y + PATCH, x:x + PATCH]
+                    pred = model(patch)  # (1,3,256,256)
+                    pred = pred * window  # Weighted
+                    out_sum[..., y:y + PATCH, x:x + PATCH] += pred
+                    w_sum[..., y:y + PATCH, x:x + PATCH] += window
 
             # ----------- Normalize to obtain the complete result -----------
-            full_pred = out_sum / w_sum.clamp_min(1e-6)           # (1,3,H,W)
+            full_pred = out_sum / w_sum.clamp_min(1e-6)  # (1,3,H,W)
             full_pred = torch.nn.functional.normalize(full_pred, dim=1)
             full_pred *= mask
 
             # ----------- Angular MAE calculation -----------
             # Network outputs normal maps in [-1, 1] range; ground truth must be normalized to this interval for evaluation.
             # pred_n = (full_pred *2.0 -1.0) * mask
-            gt_n = (gt *2.0 -1.0) * mask
+            gt_n = (gt * 2.0 - 1.0) * mask
 
-            M  = torch.sum(mask)                                  # Masked valid pixels
-            m  = torch.sum(criterion(full_pred , gt_n )) / M
+            M = torch.sum(mask)  # Masked valid pixels
+            cosine = nn.CosineSimilarity()
+            m = torch.sum(cosine(full_pred, gt_n)) / M
             mae = torch.acos(m.clamp(-1 + 1e-6, 1 - 1e-6)) * 180 / pi
 
-            total_loss   += mae.item()
-            total_samples += 1       # batch_size=1
+            total_loss += mae.item()
+            total_samples += 1  # batch_size=1
 
-            if i % 10 == 0 and local_rank == 0:
-                img = ((full_pred+1)*0.5)*mask
+            if i % 100 == 0 and local_rank == 0:
+                img = ((full_pred + 1) * 0.5) * mask
                 save_image(img, f'./results_sfp/{sample["filename"][0]}_{epoch}.bmp')
 
     # ----------- DDP Synchronization + Logging -----------
@@ -290,9 +285,10 @@ def val_sfp(val_loader, model, writer, epoch, local_rank, args, criterion, val_l
     val_samples_tensor = sync_tensor(val_samples_tensor)
     val_mae_tensor = val_mae_tensor / val_samples_tensor
     if local_rank == 0:
-        writer.add_scalar('validation_mae', val_mae_tensor.item(), epoch+1)
+        writer.add_scalar('validation_mae', val_mae_tensor.item(), epoch + 1)
     val_loss_list.append(val_mae_tensor.item())
     return val_loss_list
+
 
 def create_window(window_size, channel):
     # Create Gaussian window
@@ -315,6 +311,7 @@ def draw_curve(train_loss_list, title):
     plt.grid(True)  # Enhance readability by adding gridlines
     plt.savefig(f'{title}.png')
 
+
 def draw_two_curve(list_1, list_2, title_1, title_2):
     plt.figure()
     plt.plot(list_1, label=f'{title_1}', linestyle='-', marker='o')
@@ -325,6 +322,7 @@ def draw_two_curve(list_1, list_2, title_1, title_2):
     plt.legend()
     plt.grid(True)  # Enhance readability by adding gridlines
     plt.savefig('two_curve.png')
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -358,7 +356,8 @@ class ProgressMeter(object):
         self.prefix = prefix
 
     def display(self, batch):
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]  # Curly braces and format fields will be substituted by format() arguments
+        entries = [self.prefix + self.batch_fmtstr.format(
+            batch)]  # Curly braces and format fields will be substituted by format() arguments
         entries += [str(meter) for meter in self.meters]
         print('\t'.join(entries))
 
@@ -366,6 +365,7 @@ class ProgressMeter(object):
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
+
 
 def adjust_learning_rate(optimizer, epoch, args):
     """Decay the learning rate based on schedule"""
@@ -385,10 +385,11 @@ def adjust_learning_rate(optimizer, epoch, args):
         else:  # stepwise lr schedule
             for milestone in args.schedule:
                 lr *= 0.1 if epoch >= milestone else 1.
-    for param_group in optimizer.param_groups:  
+    for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-    print("Epoch-{}, base lr {}, optimizer.param_groups[0]['lr']".format(epoch+1, args.lr),
+    print("Epoch-{}, base lr {}, optimizer.param_groups[0]['lr']".format(epoch + 1, args.lr),
           optimizer.param_groups[0]['lr'])
+
 
 def sync_tensor(tensor):
     """Synchronize tensor across all GPUs to ensure correct loss calculation"""

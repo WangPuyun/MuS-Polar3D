@@ -15,12 +15,16 @@ import config as config
 from math import pi
 from Datasets import RandomMove, unfold_image, concat_image
 from torchvision.utils import save_image
+# SfP Baseline
 from AttentionU2Net.U2Net import AttentionU2Net
 from DeepSfP_Net import DeepSfP
-from TransUNet import TransUnet
+from TransUNet import TransUnet # SfPW
+from TransSfP.TransSfPNet.TransSfPNet import TransSfPNet
+
 from utils_window import PATCH, OVERLAP, STRIDE, hann2d
 import cv2
 import matplotlib.pyplot as plt
+# Distributed inference can be used, but it should be noted that the number of GPUs needs to be equal to the number of test_batch_size
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 def parse_args():
@@ -29,11 +33,11 @@ def parse_args():
     parser.add_argument("--model_name", type=str, default=None,
                     help="Path to the pre-trained model file to load, e.g., 'xxx.pth'")
     # Test batch size
-    parser.add_argument("--test_batch_size", type=int, default=4, help="Batch size for testing")
+    parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for testing, it should be equal to the number of GPUs")
     # Test data directory or other parameters (add as needed)
     parser.add_argument("--ckpt_path", type=str, default='./pt/300.pth', help="Path to the model weights file, e.g., './pt/100.pt'")
-    parser.add_argument("--results_dir", type=str, default='./results_sfp_best', help="Directory to save prediction maps, e.g., './results_sfp_100'")
-    parser.add_argument("--error_maps_dir", type=str, default='./error_maps_best', help="Directory to save error maps, e.g., './error_maps_100'")
+    parser.add_argument("--results_dir", type=str, default='./results_sfp', help="Directory to save prediction maps, e.g., './results_sfp_100'")
+    parser.add_argument("--error_maps_dir", type=str, default='./error_maps', help="Directory to save error maps, e.g., './error_maps_100'")
 
     args = parser.parse_args()
     return args

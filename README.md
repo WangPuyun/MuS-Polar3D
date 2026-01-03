@@ -1,10 +1,10 @@
 # MuS-Polar3D
-[![Paper2](https://img.shields.io/badge/Paper-arXiv-blue)]() 
-[![BaiduPan](https://img.shields.io/badge/Data-BaiduPan-brightgreen)]()
+[![Paper2](https://img.shields.io/badge/Paper-arXiv-blue)](https://arxiv.org/abs/2512.21513) 
+[![BaiduPan](https://img.shields.io/badge/Data-BaiduPan-brightgreen)](https://pan.baidu.com/s/1mR-_FX8Ra6PuNPy0fHTREA?pwd=xpu3)
 
 
 A deep learning–based project for **scattered image normal estimation**.
-This repository integrates multiple network architectures (DeepSfP, AttentionU<sup>2</sup>Net, SfPW, etc.) to process and analyze scattered images.
+This repository integrates multiple network architectures (DeepSfP, AttentionU<sup>2</sup>Net, SfPW, TransSfP, etc.) to process and analyze scattered images.
 
 <p align="center">
   <img src="./README_img/img1.png" alt="demo1" width="310" />
@@ -15,7 +15,7 @@ This repository integrates multiple network architectures (DeepSfP, AttentionU<s
 ## ✨ Features
 
 * **Normal Estimation**: Accurate normal prediction within the \[-1, 1] range.
-* **Multiple Models**: Includes implementations of DeepSfP, AttentionU<sup>2</sup>Net, SfPW, and more.
+* **Multiple Models**: Includes implementations of DeepSfP, AttentionU<sup>2</sup>Net, SfPW, TransSfP, and more.
 * **Training Logs**: Automatically generates `training_log_xxx.csv` files to record training progress.
 * **Version Management**: Uses `git_push.sh` to automatically generate version numbers (v1, v2, …) and push code, and `git_pull.sh` to automatically fetch and update to the latest code.
 
@@ -51,14 +51,14 @@ cd MuS-Polar3D
 
 In Baidu Netdisk, our dataset structure is as follows:
 ```
-PolarObject
+MuS-Polar3D
 │
-├───PolarObject_Mat/        # MATLAB .mat files (847 items)
+├───MuS-Polar3D_Mat/        # MATLAB .mat files (847 items)
 │   ├─ Angel1_back_0.mat
 │   ├─ Angel1_back_1.mat
 │   ├─ ...
 │
-├───PolarObject_Pol/        # Polarized images (847 folders)
+├───MuS-Polar3D_Pol/        # Polarized images (847 folders)
 │   ├───Angel1_back_0/
 │   │   ├─ 0.png
 │   │   ├─ 45.png
@@ -69,7 +69,7 @@ PolarObject
 │   ├───Angel1_back_1/
 │   ├─ ...
 │
-├───PolarObject_Raw/        # Raw captured data (121 folders)
+├───MuS-Polar3D_Raw/        # Raw captured data (121 folders)
 │   ├───Angel1_left/
 │   │   ├─ Angel1_left_0.bmp
 │   │   ├─ Angel1_left_1.bmp
@@ -82,22 +82,22 @@ PolarObject
 │   ├───Angel2_back/
 │   ├─ ...
 │
-├───PolarObject_3D/         # 3D object models (.obj, 42 items)
+├───MuS-Polar3D_3D/         # 3D object models (.obj, 42 items)
     ├─ Angel1.obj
     ├─ Angel2.obj
     ├─ ...
 ```
 #### Notes  
 
-- 📊 **PolarObject_Mat**: Processed `.mat` files (**847 items**) containing polarization intensity images (0°, 45°, 90°, 135°), object masks, ground truth normals, polarization parameters, and related physical components.  
-- 🖼️ **PolarObject_Pol**: Polarized image datasets, each folder includes 4 angles (**0°, 45°, 90°, 135°**), segmentation mask, and ground truth normal (**847 folders**).  
-- 📂 **PolarObject_Raw**: Raw capture data including `.bmp` sequences, `.mlp` project files, segmentation masks, EXR normal maps, and ground truth normals (**121 folders**).  
-- 🧩 **PolarObject_3D**: 3D object models in `.obj` format (**42 items**), providing geometric references corresponding to the polarization images.
+- 📊 **MuS-Polar3D_Mat**: Processed `.mat` files (**847 items**) containing polarization intensity images (0°, 45°, 90°, 135°), object masks, ground truth normals, polarization parameters, and related physical components.  
+- 🖼️ **MuS-Polar3D_Pol**: Polarized image datasets, each folder includes 4 angles (**0°, 45°, 90°, 135°**), segmentation mask, and ground truth normal (**847 folders**).  
+- 📂 **MuS-Polar3D_Raw**: Raw capture data including `.bmp` sequences, `.mlp` project files, segmentation masks, EXR normal maps, and ground truth normals (**121 folders**).  
+- 🧩 **MuS-Polar3D_3D**: 3D object models in `.obj` format (**42 items**), providing geometric references corresponding to the polarization images.
 
 > To run the code, you need to prepare the baseline dataset used in our experiments.  
 > Please follow the steps below:
 > 
-> 1. Download all `.mat` data files from the provided [Baidu Netdisk link]().   
+> 1. Download all `.mat` data files from the provided [Baidu Netdisk link](https://pan.baidu.com/s/1mR-_FX8Ra6PuNPy0fHTREA?pwd=xpu3).   
 > 2. Place **all `.mat` files** into the following directory:     `Underwater Dataset/Baseline_Data/`
 
 
@@ -109,7 +109,7 @@ python train.py
 
 ### 4. Evaluate / Visualization
 
-You can directly use our [pretrained models]() for evaluation and visualization without retraining.
+You can directly use our [pretrained models](https://pan.baidu.com/s/1viZRWyxiZrgvYLsuaVpEJQ?pwd=i3db) for evaluation and visualization without retraining.
 
 To evaluate the surface normal maps and visualize the corresponding angular error, you can use the `Angle_error_map.py` script. This script performs two main tasks:
 
@@ -125,17 +125,38 @@ python Angle_error_map.py
   <img src="./README_img/Angle_error_map.png" alt="demo1" width="910" />
 </p>
 
+### 5. Secondary development
+
+
+If you plan to use this repository for further development on your own data:
+
+- Save your image data into a MATLAB `.mat` file.
+- In `Dataset.py`, read the corresponding variables from your `.mat` file (adjust the variable names/keys to match your `.mat` structure).
+- Then, modify/switch the network model configuration in `config.py` to the baseline you want to train, and run `train.py` as usual.
+
+---
+
+
+## 🙏 Acknowledgements
+This work partially uses the implementation from the following open-source project:
+
+- [Deep Shape from Polarization](https://github.com/UCLA-VMG/DeepSfP.git)
+- [Shape from Polarization for Complex Scenes in the Wild](https://github.com/ChenyangLEI/sfp-wild.git)
+- [Transparent Shape from a Single View Polarization Image](https://github.com/shaomq2187/TransSfP.git)
+
+We sincerely thank the authors for open-sourcing their code and making this research possible.
+
 ---
 
 
 ## 🤝 Citation
 
-For questions or suggestions, feel free to open an issue or contact the author.
+If you find our work useful in your research, please consider citing:
 ```bibtex
-@article{,
-  title={},
-  author={},
-  journal={},
-  year={}
+@article{wang2025mus,
+  title={MuS-Polar3D: A Benchmark Dataset for Computational Polarimetric 3D Imaging under Multi-Scattering Conditions},
+  author={Wang, Puyun and Yu, Kaimin and He, Huayang and Wu, Xianyu},
+  journal={arXiv preprint arXiv:2512.21513},
+  year={2025}
 }
 ```
