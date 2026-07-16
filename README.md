@@ -1,4 +1,9 @@
 # MuS-Polar3D
+
+<p align="center">
+  <strong>English</strong> | <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
 [![Paper2](https://img.shields.io/badge/Paper-arXiv-blue)](https://arxiv.org/abs/2512.21513) 
 [![BaiduPan](https://img.shields.io/badge/Data-BaiduPan-brightgreen)](https://pan.baidu.com/s/1mR-_FX8Ra6PuNPy0fHTREA?pwd=xpu3)
 
